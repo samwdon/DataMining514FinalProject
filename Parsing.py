@@ -44,7 +44,7 @@ def load_matrix(filename):
 class BagOfWords(object):
 	"""docstring for BagOfWords"""
 
-	def __init__(self, training_filename, testing_filename, max_train_lines=0, max_test_lines=0, stop_filename='', n=2, tf_idf=True, combine_code=True):
+	def __init__(self, training_filename, testing_filename, max_train_lines=0, max_test_lines=0, stop_filename='', n=2, tf_idf=False, combine_code=False):
 		self.ngram_map = {}
 		self.ngram_list = []
 		self.tags = set()
@@ -108,6 +108,7 @@ class BagOfWords(object):
 
 	def process_question(self, question, n, training=True):
 		question = question.replace('""', ' ')[1:]
+		question = question.replace('", "', '","')
 		question = question.split('","')
 
 		qID = int(question[0][1:])
@@ -161,6 +162,7 @@ class BagOfWords(object):
 
 	def process_question_again(self, question, n, training=True):
 		question = question.replace('""', ' ')[1:]
+		question = question.replace('", "', '","')
 		question = question.split('","')
 
 		qID = int(question[0][1:])
@@ -223,23 +225,29 @@ class BagOfWords(object):
 
 	def process_tags(self, question):
 		question = question.replace('""', ' ')[1:]
+		question = question.replace('", "', '","')
 		question = question.split('","')
 
-		qTags = question[3].lower()[:-2]
-		qTags = qTags.split()
+		qTags = []
+		if len(question[3]) >= 2:
+			qTags = question[3].lower()[:-2]
+			qTags = qTags.split()
+
+
 		for tag in qTags:
 			self.tags.add(tag)
 
 
 	def build_bag_of_words(self, training_filename, testing_filename, n=2):
 		with open(training_filename, 'rU') as data_reader:
+			data_reader.readline()
 			num_read = 0
 			question = ''
 			for line in data_reader:
 				line = line.strip()
 				question += ' ' + line
 				if line.find('","') == 0:
-					if self.max_test_lines != 0 and num_read == self.max_test_lines:
+					if self.max_train_lines != 0 and num_read == self.max_train_lines:
 						break
 					num_read += 1
 
@@ -248,6 +256,7 @@ class BagOfWords(object):
 					question = ''
 
 		with open(testing_filename, 'rU') as data_reader:
+			data_reader.readline()
 			num_read = 0
 			question = ''
 			for line in data_reader:
@@ -285,6 +294,7 @@ class BagOfWords(object):
 		self.training_tags = lil_matrix((self.training_questions, self.num_tags))
 
 		with open(training_filename, 'rU') as data_reader:
+			data_reader.readline()
 			num_read = 0
 			question = ''
 			for line in data_reader:
@@ -292,7 +302,7 @@ class BagOfWords(object):
 				line = line.strip()
 				question += ' ' + line
 				if line.find('","') == 0:
-					if self.max_test_lines != 0 and num_read == self.max_test_lines:
+					if self.max_train_lines != 0 and num_read == self.max_train_lines:
 						break
 					num_read += 1
 
@@ -302,6 +312,7 @@ class BagOfWords(object):
 					
 
 		with open(testing_filename, 'rU') as data_reader:
+			data_reader.readline()
 			num_read = 0
 			question = ''
 			for line in data_reader:
@@ -322,12 +333,13 @@ class BagOfWords(object):
 
 	def build_tag_list(self, filename):
 		with open(filename, 'rU') as tag_reader:
+			tag_reader.readline()
 			num_read = 0
 			question = ''
 			for line in tag_reader:
 				question += ' ' + line
 				if line.find('","') == 0:
-					if self.max_test_lines != 0 and num_read == self.max_test_lines:
+					if self.max_train_lines != 0 and num_read == self.max_train_lines:
 						break
 					num_read += 1
 
@@ -347,9 +359,8 @@ class BagOfWords(object):
 
 		self.num_tags = next_index
 
-
 def main():
-	bag = BagOfWords('sampleTrain.txt', 'somelines.txt', 0, 0, '')
+	bag = BagOfWords('Train.txt', 'Test.txt', 500, 500, '')
 
 
 if __name__ == "__main__":
