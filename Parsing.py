@@ -4,6 +4,8 @@ from HTMLParser import HTMLParser
 import re
 import string
 import itertools
+import sys
+import time
 
 #Thanks Eloff from StackOverflow!
 class MLStripper(HTMLParser):
@@ -22,9 +24,8 @@ def strip_tags(html):
 
 def save_matrix(filename, matrix):
 	with open(filename, 'w') as mat_writer:
-		cx = coo_matrix(matrix)
-		mat_writer.write(str(cx.shape[0]) + ' ' + str(cx.shape[1]) + '\n')
-		for i,j,v in itertools.izip(cx.row, cx.col, cx.data):
+		mat_writer.write(str(matrix.shape[0]) + ' ' + str(matrix.shape[1]) + '\n')
+		for i,j,v in itertools.izip(matrix.row, matrix.col, matrix.data):
 			mat_writer.write("%d %d %s" % (i,j,v) + '\n')
 
 def load_matrix(filename):
@@ -41,10 +42,33 @@ def load_matrix(filename):
 			matrix[row, col] = val
 		return matrix.tocsr()
 
+def tf_id(training_data, testing_data):
+	D = training_data.shape[0] + testing_data.shape[0]
+	id_scores = zeros(training_data.shape[1])
+	for i in xrange(training_data.shape[1]):
+		count = 0
+		for row in training_data:
+			if row[i] > 0:
+				count += 1
+		for row in testing_data:
+			if row[i] > 0:
+				count += 1
+		id_score = log(D / float(count))
+		id_scores[i] = (id_score)
+
+	for row in training_data:
+		for i in xrange(len(row)):
+			row[i] *= id_scores[i]
+	for row in testing_data:
+		for i in xrange(len(row)):
+			row[i] *= id_scores[i]
+
+	return (training_data, testing_data)
+
 class BagOfWords(object):
 	"""docstring for BagOfWords"""
 
-	def __init__(self, training_filename, testing_filename, max_train_lines=0, max_test_lines=0, stop_filename='', n=2, tf_idf=False, combine_code=False):
+	def __init__(self, training_filename, testing_filename, max_train_lines=0, max_test_lines=0, stop_filename='', n=2, tf_idf=True, combine_code=True, check_substring_tags=False):
 		self.ngram_map = {}
 		self.ngram_list = []
 		self.tags = set()
@@ -61,22 +85,46 @@ class BagOfWords(object):
 		self.testing_questions = 0
 		self.total_questions = 0
 		self.tf_idf = tf_idf
+		self.post_tf_idf = False
 		self.tf_idf_map = {}
 		self.stop_words = set()
 		self.n = n
 		self.combine_code = combine_code
 		self.max_train_lines = max_train_lines
 		self.max_test_lines = max_test_lines
+		self.check_substring_tags = check_substring_tags
+		self.log_list = []
 
+		print 'Running with training data: ' + training_filename + ' (max ' + str(max_train_lines) + ' lines), testing data: ' + testing_filename + ' (max ' + str(max_test_lines) + ' lines)'
+		print 'Options: stop file: ' + stop_filename + ', max ngram length: ' + str(n) + ', tf-idf: ' + str(tf_idf) + ', combining code: ' + str(combine_code) + ', checking substring tags: ' + str(check_substring_tags)
 		self.build_stop_set(stop_filename)
 		self.build_tag_list(training_filename)
 		self.build_bag_of_words(training_filename, testing_filename, self.n)
-		save_matrix("training_matrix.txt", self.training_bag.todense())
-		save_matrix("testing_matrix.txt", self.testing_bag)
-		save_matrix("training_tag_matrix.txt", self.training_tags)
+
+		if self.post_tf_idf:
+			self.training_bag, self.testing_bag = tf_id(self.training_bag, self.testing_bag)
+
+		self.training_bag = self.training_bag.tocoo()
+		self.testing_bag = self.testing_bag.tocoo()
+
+		save_matrix('training_matrix.txt', self.training_bag)
+		del self.training_bag
+		save_matrix('testing_matrix.txt', self.testing_bag)
+		del self.testing_bag
+		save_matrix('training_tag_matrix.txt', self.training_tags)
+		del self.training_tags
+		self.write_log('log.txt')
 		#print load_matrix("training_matrix.txt")
 		#print load_matrix("testing_matrix.txt")
 		#print load_matrix("training_tag_matrix.txt")
+
+	def log(self, message):
+		self.log_list.append(message)
+
+	def write_log(self, filename):
+		with open(filename, 'w') as log_writer:
+			for message in self.log_list:
+				log_writer.write(message + '\n')
 
 	def build_stop_set(self, stop_filename):
 		if stop_filename == '':
@@ -107,7 +155,7 @@ class BagOfWords(object):
 
 
 	def process_question(self, question, n, training=True):
-		question = question.replace('""', ' ')[1:]
+		question = question.replace('""', ' ')
 		question = question.replace('", "', '","')
 		question = question.split('","')
 
@@ -117,7 +165,6 @@ class BagOfWords(object):
 
 		qTitle, qTCode = self.strip_code_and_formatting(qTitle)
 		qBody, qBCode = self.strip_code_and_formatting(qBody)
-
 		body_words = qBody.split()
 		title_words = qTitle.split()
 
@@ -126,11 +173,19 @@ class BagOfWords(object):
 		new_words =[]
 		for i, word in enumerate(words):
 			strip_punc = True
-			for tag in self.tags:
-				if tag in word:
+
+			if self.check_substring_tags:
+				for tag in self.tags:
+					if tag in word:
+						strip_punc = False
+						word = tag
+						break
+			else:
+				if word in self.tags:
 					strip_punc = False
-					word = tag
-					break
+				elif word[:-1] in self.tags:
+					word = word[:-1]
+					strip_punc = False
 
 			if strip_punc:
 				word = word.translate(string.maketrans("",""), string.punctuation)
@@ -139,7 +194,6 @@ class BagOfWords(object):
 				new_words.append(word)
 
 		words = new_words
-
 		tf_temp_set = set()
 		for index, word in enumerate(words):
 			for i in xrange(n+1):
@@ -161,7 +215,7 @@ class BagOfWords(object):
 
 
 	def process_question_again(self, question, n, training=True):
-		question = question.replace('""', ' ')[1:]
+		question = question.replace('""', ' ')
 		question = question.replace('", "', '","')
 		question = question.split('","')
 
@@ -174,8 +228,11 @@ class BagOfWords(object):
 			qTags = qTags.split()
 			for qTag in qTags:
 				training_ind = self.training_question_index
-				tag_index = self.tag_map[qTag]
-				self.training_tags[training_ind, tag_index] = 1
+				if qTag in self.tag_map:
+					tag_index = self.tag_map[qTag]
+					self.training_tags[training_ind, tag_index] = 1
+				else:
+					self.log('Tag: ' + qTag + ', in question: ' + str(qID) + ' (' + qTitle + ') not found in tag list!')
 
 		qTitle, qTCode = self.strip_code_and_formatting(qTitle)
 		qBody, qBCode = self.strip_code_and_formatting(qBody)
@@ -188,11 +245,19 @@ class BagOfWords(object):
 		new_words =[]
 		for i, word in enumerate(words):
 			strip_punc = True
-			for tag in self.tags:
-				if tag in word:
+
+			if self.check_substring_tags:
+				for tag in self.tags:
+					if tag in word:
+						strip_punc = False
+						word = tag
+						break
+			else:
+				if word in self.tags:
 					strip_punc = False
-					word = tag
-					break
+				elif word[:-1] in self.tags:
+					word = word[:-1]
+					strip_punc = False
 
 			if strip_punc:
 				word = word.translate(string.maketrans("",""), string.punctuation)
@@ -239,43 +304,64 @@ class BagOfWords(object):
 
 
 	def build_bag_of_words(self, training_filename, testing_filename, n=2):
+		print 'Preprocessing training file...'
 		with open(training_filename, 'rU') as data_reader:
 			data_reader.readline()
 			num_read = 0
-			question = ''
+
+			question = data_reader.readline()
+			expected_num = question.split('"')[1]
+			print 'Starting id: ' + expected_num
+			expected_num = int(expected_num) + 1
+
 			for line in data_reader:
 				line = line.strip()
-				question += ' ' + line
-				if line.find('","') == 0:
+				if line.find('"' + str(expected_num) + '"') != -1:
 					if self.max_train_lines != 0 and num_read == self.max_train_lines:
 						break
-					num_read += 1
 
+					num_read += 1
+					if num_read % 1000 == 0:
+						print num_read
 					self.process_question(question, n, True)
 					self.training_questions += 1
-					question = ''
+					question = line
+					expected_num += 1
+				else:
+					question += ' ' + line
 
+		print 'Preprocessing testing file...'
 		with open(testing_filename, 'rU') as data_reader:
 			data_reader.readline()
 			num_read = 0
-			question = ''
+
+			question = data_reader.readline()
+			expected_num = question.split('"')[1]
+			print 'Starting id: ' + expected_num
+			expected_num = int(expected_num) + 1
+
 			for line in data_reader:
 				line = line.strip()
-				if line == '"':
+				if line.find('"' + str(expected_num) + '"') != -1:
 					if self.max_test_lines != 0 and num_read == self.max_test_lines:
 						break
-					num_read += 1
 
-					self.process_question(question, n, False)
+					num_read += 1
+					if num_read % 1000 == 0:
+						print num_read
+
+					self.process_question(question[:-1], n, False)
 					self.testing_questions += 1
-					question = ''
+					question = line
+					expected_num += 1
 				else:
 					question += ' ' + line
 
 		self.total_questions = self.training_questions + self.testing_questions
 		self.ngram_set = self.training_set.intersection(self.test_set)
-		self.training_set = set()
-		self.test_set = set()
+		
+		del self.training_set
+		del self.test_set
 
 		next_index = 0
 		for ngram in self.ngram_set:
@@ -286,52 +372,78 @@ class BagOfWords(object):
 		with open('ngram_list.txt', 'w') as ngram_writer:
 			ngram_writer.write('\n'.join(self.ngram_list))
 
-		self.ngram_list = []
-		self.ngram_set = set()
+		del self.ngram_list
+		del self.ngram_set
 
 		self.training_bag = lil_matrix((self.training_questions, next_index))
 		self.testing_bag =  lil_matrix((self.testing_questions, next_index))
 		self.training_tags = lil_matrix((self.training_questions, self.num_tags))
 
+		print 'Parsing training file...'
 		with open(training_filename, 'rU') as data_reader:
 			data_reader.readline()
 			num_read = 0
-			question = ''
-			for line in data_reader:
 
+			question = data_reader.readline()
+			expected_num = question.split('"')[1]
+			print 'Starting id: ' + expected_num
+			expected_num = int(expected_num) + 1
+
+			for line in data_reader:
 				line = line.strip()
-				question += ' ' + line
-				if line.find('","') == 0:
+				if line.find('"' + str(expected_num) + '"') != -1:
 					if self.max_train_lines != 0 and num_read == self.max_train_lines:
 						break
+
 					num_read += 1
+					if num_read % 1000 == 0:
+						print num_read
 
 					self.process_question_again(question, n, True)
 					self.training_question_index += 1
-					question = ''
-					
+					question = line
+					expected_num += 1
+				else:
+					question += ' ' + line
 
+		print 'Parsing testing file...'
 		with open(testing_filename, 'rU') as data_reader:
 			data_reader.readline()
 			num_read = 0
-			question = ''
+			
+			question = data_reader.readline()
+			expected_num = question.split('"')[1]
+			print 'Starting id: ' + expected_num
+			expected_num = int(expected_num) + 1
+
 			for line in data_reader:
 				line = line.strip()
-				if line == '"':
+				if line.find('"' + str(expected_num) + '"') != -1:
 					if self.max_test_lines != 0 and num_read == self.max_test_lines:
 						break
-					num_read += 1
 
-					self.process_question_again(question, n, False)
+					num_read += 1
+					if num_read % 1000 == 0:
+						print num_read
+
+					self.process_question_again(question[:-1], n, False)
 					self.testing_question_index += 1
-					question = ''
+					question = line
+					expected_num += 1
 				else:
 					question += ' ' + line
+
+		del self.ngram_map
+		del self.tags
+		del self.tag_map
+		del self.tf_idf_map
+		del self.stop_words
 
 		self.training_bag = self.training_bag.tocsr()
 		self.testing_bag = self.testing_bag.tocsr()
 
 	def build_tag_list(self, filename):
+		print 'Building tag list...'
 		with open(filename, 'rU') as tag_reader:
 			tag_reader.readline()
 			num_read = 0
@@ -341,7 +453,10 @@ class BagOfWords(object):
 				if line.find('","') == 0:
 					if self.max_train_lines != 0 and num_read == self.max_train_lines:
 						break
+
 					num_read += 1
+					if num_read % 1000 == 0:
+						print num_read
 
 					self.process_tags(question)
 					question = ''
@@ -357,10 +472,12 @@ class BagOfWords(object):
 		with open('tag_list.txt', 'w') as tag_writer:
 			tag_writer.write('\n'.join(self.tag_list))
 
+		del self.tag_list
+
 		self.num_tags = next_index
 
 def main():
-	bag = BagOfWords('Train.txt', 'Test.txt', 500, 500, '')
+	bag = BagOfWords('Train.txt', 'Test.txt', 100000, 100000, 'stop_words.txt', 2)
 
 
 if __name__ == "__main__":
