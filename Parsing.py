@@ -500,7 +500,7 @@ class BagOfWords(object):
                 self.num_tags = next_index
 
 def main():
-        bag = BagOfWords('Train.csv', 'Train.csv', 0, 0, 'stopwords.txt', 2)
+        bag = BagOfWords('Train.csv', 'Test.csv', 0, 0, 'stop_words.txt', 2)
 
 
 if __name__ == "__main__":
