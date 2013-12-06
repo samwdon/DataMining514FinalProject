@@ -22,11 +22,24 @@ def strip_tags(html):
     s.feed(html)
     return s.get_data()
 
-def save_matrix(filename, matrix):
+def save_matrix(filename, matrix, start_rows=0, end_rows=0):
 	with open(filename, 'w') as mat_writer:
-		mat_writer.write(str(matrix.shape[0]) + ' ' + str(matrix.shape[1]) + '\n')
+		rows = matrix.shape[0]
+		if end_rows != 0:
+			rows = end_rows
+		if start_rows != 0:
+			rows -= start_rows
+
+		mat_writer.write(str(rows) + ' ' + str(matrix.shape[1]) + '\n')
 		for i,j,v in itertools.izip(matrix.row, matrix.col, matrix.data):
-			mat_writer.write("%d %d %s" % (i,j,v) + '\n')
+			if start_rows != 0 and i < start_rows:
+				continue
+
+			if end_rows != 0 and i >= end_rows:
+				break
+
+			mat_writer.write("%d %d %s" % ((i-start_rows),j,v) + '\n')
+
 
 def load_matrix(filename):
 	with open(filename, 'rU') as mat_reader:
@@ -106,12 +119,19 @@ class BagOfWords(object):
 
 		self.training_bag = self.training_bag.tocoo()
 		self.testing_bag = self.testing_bag.tocoo()
+		self.training_tags = self.training_tags.tocoo()
 
-		save_matrix('training_matrix.txt', self.training_bag)
-		del self.training_bag
-		save_matrix('testing_matrix.txt', self.testing_bag)
+		save_matrix('testing_matrix_full.txt', self.testing_bag)
 		del self.testing_bag
-		save_matrix('training_tag_matrix.txt', self.training_tags)
+
+		save_matrix('training_matrix_full.txt', self.training_bag)
+		save_matrix('training_matrix.txt', self.training_bag, 0, int(self.max_train_lines * .7))
+		save_matrix('testing_matrix.txt', self.training_bag, int(self.max_train_lines * .7), 0)
+		del self.training_bag
+		
+		save_matrix('training_tag_matrix_full.txt', self.training_tags)
+		save_matrix('training_tags.txt', self.training_tags, 0, int(self.max_train_lines * .7))
+		save_matrix('testing_tags.txt', self.training_tags, int(self.max_train_lines * .7), 0)
 		del self.training_tags
 		self.write_log('log.txt')
 		#print load_matrix("training_matrix.txt")
@@ -155,6 +175,7 @@ class BagOfWords(object):
 
 
 	def process_question(self, question, n, training=True):
+		question = question.replace('"""""', '"')
 		question = question.replace('""', ' ')
 		question = question.replace('", "', '","')
 		question = question.split('","')
@@ -215,6 +236,7 @@ class BagOfWords(object):
 
 
 	def process_question_again(self, question, n, training=True):
+		question = question.replace('"""""', '"')
 		question = question.replace('""', ' ')
 		question = question.replace('", "', '","')
 		question = question.split('","')
@@ -289,15 +311,15 @@ class BagOfWords(object):
 
 
 	def process_tags(self, question):
+		question = question.replace('"""""', '"')
 		question = question.replace('""', ' ')[1:]
 		question = question.replace('", "', '","')
 		question = question.split('","')
 
 		qTags = []
-		if len(question[3]) >= 2:
+		if len(question) > 2 and len(question[3]) >= 2:
 			qTags = question[3].lower()[:-2]
 			qTags = qTags.split()
-
 
 		for tag in qTags:
 			self.tags.add(tag)
@@ -477,7 +499,7 @@ class BagOfWords(object):
 		self.num_tags = next_index
 
 def main():
-	bag = BagOfWords('Train.txt', 'Test.txt', 100000, 100000, 'stop_words.txt', 2)
+	bag = BagOfWords('Train.txt', 'Train.txt', 5000, 5000, 'stop_words.txt', 2)
 
 
 if __name__ == "__main__":
