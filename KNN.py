@@ -3,9 +3,10 @@ path.reverse()
 from numpy import *
 from scipy.sparse import *
 from HTMLParser import HTMLParser
-from sklearn.neighbors import NearestNeighbors
-from sklearn.neighbors import DistanceMetric
+from sklearn.neighbors import NearestNeighbors, DistanceMetric
 from sklearn.preprocessing import normalize
+from sklearn.svm import SVC, LinearSVC
+from sklearn.decomposition import SparsePCA, PCA, TruncatedSVD
 import re
 import string
 import itertools
@@ -43,6 +44,44 @@ def knn(train, test, train_tags, test_tags, k=5, minCount=1):
 		outputRow += 1
 
 	return output.tocsr()
+
+def svm(train, test, train_tags, test_tags, c=10, ker='linear', gam=0.0):
+	train_tags = train_tags.tocsc()
+	clf = SVC(C=c, kernel=ker, gamma=gam)
+
+	if ker == 'linear':
+		clf = LinearSVC(C=c)
+
+	output = lil_matrix((test.shape[0], train_tags.shape[1]))
+
+	for i in xrange(train_tags.shape[1]):
+		labels = ravel(train_tags.getcol(i).todense())
+		if labels.sum() == 0:
+			print 'No instances of tag: ' + str(i)
+			continue
+
+		if i % 100 == 0:
+			print str(i) + '/' + str(train_tags.shape[1])
+
+		labels = (labels * 2) - 1
+
+		clf.fit(train, labels)
+		pred = clf.predict(test)
+		outputRow = 0
+		for val in pred:
+			if val > 0:
+				output[outputRow, i] = 1
+			outputRow += 1
+
+	train_tags = train_tags.tocsr()
+	return output.tocsr()
+
+def applyPCA(train, test, target_dims=2500):
+	pca1 = TruncatedSVD(n_components=target_dims, algorithm='arpack')
+	pca1.fit(train)
+	train = pca1.transform(train)
+	test = pca1.transform(test)
+	return train, test
 
 def calcAccuracy(output_labels, test_labels):
 	diff = output_labels - test_labels
@@ -82,7 +121,22 @@ def main():
 	test_tags = load_matrix('testing_tags.txt')
 	print 'Loaded testing tags'
 
-	output = knn(train, train, train_tags, train_tags, k=1, minCount=1)
+	print 'Testing KNN...'
+	output = knn(train, test, train_tags, test_tags, k=7, minCount=3)
+	printStats(output, test_tags)
+
+	print 'Testing SVM...'
+	output = svm(train, test, train_tags, test_tags)
+	printStats(output, test_tags)
+
+	#train, test = applyPCA(train, test)
+
+	print 'Testing KNN (w/ PCA)...'
+	output = knn(train, test, train_tags, test_tags, k=7, minCount=3)
+	printStats(output, test_tags)
+
+	print 'Testing SVM (w/ PCA)...'
+	output = svm(train, test, train_tags, test_tags)
 	printStats(output, test_tags)
 
 if __name__ == "__main__":

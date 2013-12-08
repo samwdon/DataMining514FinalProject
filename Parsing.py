@@ -346,8 +346,12 @@ class BagOfWords(object):
                                         num_read += 1
                                         if num_read % 1000 == 0:
                                                 print num_read
-                                        self.process_question(question, n, True)
-                                        self.training_questions += 1
+                                        try:
+                                            self.process_question(question, n, True)
+                                            self.training_questions += 1
+                                        except:
+                                            print 'Error processing question: ' + str(expected_num) 
+                                            print question 
                                         question = line
                                         expected_num += 1
                                 else:
@@ -372,9 +376,12 @@ class BagOfWords(object):
                                         num_read += 1
                                         if num_read % 1000 == 0:
                                                 print num_read
-
-                                        self.process_question(question[:-1], n, False)
-                                        self.testing_questions += 1
+                                        try:
+                                            self.process_question(question[:-1], n, False)
+                                            self.testing_questions += 1
+                                        except:
+                                            print 'Error processing question: ' + str(expected_num) 
+                                            print question
                                         question = line
                                         expected_num += 1
                                 else:
@@ -421,9 +428,12 @@ class BagOfWords(object):
                                         num_read += 1
                                         if num_read % 1000 == 0:
                                                 print num_read
-
-                                        self.process_question_again(question, n, True)
-                                        self.training_question_index += 1
+                                        try:
+                                            self.process_question_again(question, n, True)
+                                            self.training_question_index += 1
+                                        except:
+                                            print 'Error parsing question: ' + str(expected_num) 
+                                            print question
                                         question = line
                                         expected_num += 1
                                 else:
@@ -448,9 +458,12 @@ class BagOfWords(object):
                                         num_read += 1
                                         if num_read % 1000 == 0:
                                                 print num_read
-
-                                        self.process_question_again(question[:-1], n, False)
-                                        self.testing_question_index += 1
+                                        try:
+                                            self.process_question_again(question[:-1], n, False)
+                                            self.testing_question_index += 1
+                                        except:
+                                            print 'Error parsing question: ' + str(expected_num) 
+                                            print question
                                         question = line
                                         expected_num += 1
                                 else:
