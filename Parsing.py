@@ -6,6 +6,7 @@ import string
 import itertools
 import sys
 import time
+import cProfile, pstats, StringIO
 
 #Thanks Eloff from StackOverflow!
 class MLStripper(HTMLParser):
@@ -513,8 +514,8 @@ class BagOfWords(object):
                 self.num_tags = next_index
 
 def main():
-        bag = BagOfWords('Train.csv', 'Test.csv', 0, 0, 'stop_words.txt', 2)
-
+        #cProfile.run("bag = BagOfWords('Train.txt', 'Test.txt', 1000, 1000, 'stop_words.txt', n=2, tf_idf=True, combine_code=True, check_substring_tags=False)")
+        bag = BagOfWords('Train.txt', 'Test.txt', 5000, 5000, 'stop_words.txt', n=2, tf_idf=True, combine_code=True, check_substring_tags=False)
 
 if __name__ == "__main__":
     main()
