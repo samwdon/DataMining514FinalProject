@@ -53,24 +53,129 @@ def save_matrix(filename, matrix, start_rows=0, end_rows=0):
                         if v != 0:
                             mat_writer.write("%d %d %s" % ((i-start_rows),j,v) + '\n')
 
+def load_matrix_partial(filename, max_rows=0, start_row=0, min_thresh=-1, use_dicts=False, counts={}, newCols={}):
+        finalCols = 0
+        if not use_dicts:
+            counts = {}
+            newCols = {}
+            with open(filename, 'rU') as mat_reader:
+                    line = mat_reader.readline().split()
+                    numRows = int(line[0])
+                    if max_rows != 0:
+                        numRows = max_rows
+                    numCols = int(line[1])
+                    #matrix = lil_matrix((numRows, cols))
+                    vals = []
+                    rows = []
+                    cols = []
+                    lastRow = 0
+                    for line in mat_reader:
+                            line = line.split()
+                            row = int(line[0])
+                            if max_rows != 0 and row >= max_rows:
+                                break
 
-def load_matrix(filename):
+                            if start_row != 0 and row < start_row:
+                                continue
+
+                            col = int(line[1])
+                            if col in counts:
+                                counts[col] += 1
+                            else:
+                                counts[col] = 1
+
+                            if row % 1000 == 0 and lastRow != row:
+                                print 'Populating dict: ' + str(row)
+                                lastRow = row
+
+                            #matrix[numRows, numCols] = val
+                    curCol = 0
+                    for i in xrange(numCols):
+                        if min_thresh == -1 or i in counts and counts[i] > min_thresh:
+                            newCols[i] = curCol
+                            curCol += 1
+
+                        if row % 10000 == 0 and lastRow != row:
+                                print 'Populating newCols: ' + str(row)
+                                lastRow = row
+                    print 'Num cols is: ' + str(curCol)
+                    
+
+                    
+
         with open(filename, 'rU') as mat_reader:
                 line = mat_reader.readline().split()
                 numRows = int(line[0])
+                if max_rows != 0:
+                    numRows = max_rows
                 numCols = int(line[1])
                 #matrix = lil_matrix((numRows, cols))
                 vals = []
                 rows = []
                 cols = []
+                lastRow = 0
                 for line in mat_reader:
                         line = line.split()
                         row = int(line[0])
+                        if max_rows != 0 and row >= max_rows:
+                            break
+
+                        if start_row != 0 and row < start_row:
+                            continue
+
                         col = int(line[1])
+                        if not col in newCols or counts[col] <= min_thresh:
+                            continue
+
+                        col = newCols[col]
+
+                        if col > finalCols:
+                            finalCols = col
+
                         val = float(line[2])
                         vals.append(val)
                         rows.append(row)
                         cols.append(col)
+                        if row % 1000 == 0 and lastRow != row:
+                            print row
+                            lastRow = row
+
+                        #matrix[numRows, numCols] = val
+                return coo_matrix((vals,(rows, cols)), shape=(numRows, finalCols+1)).tocsr(), counts, newCols
+
+
+
+
+def load_matrix(filename, max_rows=0, start_row=0):
+        with open(filename, 'rU') as mat_reader:
+                line = mat_reader.readline().split()
+                numRows = int(line[0])
+                if max_rows != 0:
+                    numRows = max_rows
+                numCols = int(line[1])
+                #matrix = lil_matrix((numRows, cols))
+                vals = []
+                rows = []
+                cols = []
+                lastRow = 0
+                for line in mat_reader:
+                        line = line.split()
+                        row = int(line[0])
+                        if max_rows != 0 and row >= max_rows:
+                            break
+
+                        if start_row != 0 and row < start_row:
+                            continue
+
+                        col = int(line[1])
+
+                        val = float(line[2])
+                        vals.append(val)
+                        rows.append(row)
+                        cols.append(col)
+                        if row % 1000 == 0 and lastRow != row:
+                            print row
+                            lastRow = row
 
                         #matrix[numRows, numCols] = val
                 return coo_matrix((vals,(rows, cols)), shape=(numRows, numCols)).tocsr()
